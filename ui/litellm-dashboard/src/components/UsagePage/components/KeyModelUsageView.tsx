@@ -7,47 +7,50 @@ import { TopModelData } from "../types";
 
 interface KeyModelUsageViewProps {
   topModels: TopModelData[];
+  showCost?: boolean;
 }
 
 const VISIBLE_ROWS = 5;
 // antd Table with size="small" has a row height of ~39px
 const ANTD_SMALL_TABLE_ROW_HEIGHT = 39;
 
-const columns: ColumnsType<TopModelData> = [
-  {
-    title: "Model",
-    dataIndex: "model",
-    key: "model",
-    render: (value) => value || "-",
-  },
-  {
-    title: "Spend (USD)",
-    dataIndex: "spend",
-    key: "spend",
-    render: (value) => `$${formatNumberWithCommas(value, 2)}`,
-  },
-  {
-    title: "Successful",
-    dataIndex: "successful_requests",
-    key: "successful_requests",
-    render: (value) => <span className="text-green-600">{value?.toLocaleString() || 0}</span>,
-  },
-  {
-    title: "Failed",
-    dataIndex: "failed_requests",
-    key: "failed_requests",
-    render: (value) => <span className="text-red-600">{value?.toLocaleString() || 0}</span>,
-  },
-  {
-    title: "Tokens",
-    dataIndex: "tokens",
-    key: "tokens",
-    render: (value) => value?.toLocaleString() || 0,
-  },
-];
-
-const KeyModelUsageView: React.FC<KeyModelUsageViewProps> = ({ topModels }) => {
+const KeyModelUsageView: React.FC<KeyModelUsageViewProps> = ({ topModels, showCost = true }) => {
   const [viewMode, setViewMode] = useState<"chart" | "table">("table");
+  const metricKey = showCost ? "spend" : "tokens";
+  const metricLabel = showCost ? "Spend (USD)" : "Tokens";
+
+  const columns: ColumnsType<TopModelData> = [
+    {
+      title: "Model",
+      dataIndex: "model",
+      key: "model",
+      render: (value) => value || "-",
+    },
+    {
+      title: metricLabel,
+      dataIndex: metricKey,
+      key: metricKey,
+      render: (value) => (showCost ? `$${formatNumberWithCommas(value, 2)}` : value?.toLocaleString() || 0),
+    },
+    {
+      title: "Successful",
+      dataIndex: "successful_requests",
+      key: "successful_requests",
+      render: (value) => <span className="text-green-600">{value?.toLocaleString() || 0}</span>,
+    },
+    {
+      title: "Failed",
+      dataIndex: "failed_requests",
+      key: "failed_requests",
+      render: (value) => <span className="text-red-600">{value?.toLocaleString() || 0}</span>,
+    },
+    {
+      title: "Tokens",
+      dataIndex: "tokens",
+      key: "tokens",
+      render: (value) => value?.toLocaleString() || 0,
+    },
+  ];
 
   if (topModels.length === 0) {
     return null;
@@ -76,11 +79,13 @@ const KeyModelUsageView: React.FC<KeyModelUsageViewProps> = ({ topModels }) => {
         <div className="max-h-[234px] overflow-y-auto">
           <BarChart
             style={{ height: topModels.length * 40 }}
-            data={topModels.map((m) => ({ key: m.model, spend: m.spend }))}
+            data={topModels.map((m) => ({ key: m.model, spend: m.spend, tokens: m.tokens }))}
             index="key"
-            categories={["spend"]}
+            categories={[metricKey]}
             colors={["cyan"]}
-            valueFormatter={(value) => `$${formatNumberWithCommas(value, 2)}`}
+            valueFormatter={(value) =>
+              showCost ? `$${formatNumberWithCommas(value, 2)}` : formatNumberWithCommas(value, 0)
+            }
             layout="vertical"
             yAxisWidth={180}
             tickGap={5}

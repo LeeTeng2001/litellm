@@ -85,6 +85,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
   console.log(`currentUser: ${JSON.stringify(currentUser)}`);
   console.log(`currentUser max budget: ${currentUser?.max_budget}`);
   const isAdmin = all_admin_roles.includes(userRole || "");
+  const canSeeCost = isAdmin;
 
   // Debounced search for user selector
   const [userSearchInput, setUserSearchInput] = useState("");
@@ -218,7 +219,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
         failed_requests: metrics.metrics.failed_requests,
         tokens: metrics.metrics.total_tokens,
       }))
-      .sort((a, b) => b.spend - a.spend)
+      .sort((a, b) => (canSeeCost ? b.spend - a.spend : b.tokens - a.tokens))
       .slice(0, limit);
   };
 
@@ -265,7 +266,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
         failed_requests: metrics.metrics.failed_requests,
         tokens: metrics.metrics.total_tokens,
       }))
-      .sort((a, b) => b.spend - a.spend)
+      .sort((a, b) => (canSeeCost ? b.spend - a.spend : b.tokens - a.tokens))
       .slice(0, limit);
   };
 
@@ -310,7 +311,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
       successful_requests: metrics.metrics.successful_requests,
       failed_requests: metrics.metrics.failed_requests,
       tokens: metrics.metrics.total_tokens,
-    }));
+    })).sort((a, b) => (canSeeCost ? b.spend - a.spend : b.tokens - a.tokens));
   };
 
   // Calculate top API keys from the breakdown data
@@ -358,8 +359,9 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
         key_alias: metrics.metadata.key_alias || "-", // Using truncated key as alias
         tags: metrics.metadata.tags || [], // This will show key-level tags
         spend: metrics.metrics.spend,
+        tokens: metrics.metrics.total_tokens,
       }))
-      .sort((a, b) => b.spend - a.spend)
+      .sort((a, b) => (canSeeCost ? b.spend - a.spend : b.tokens - a.tokens))
       .slice(0, limit);
   };
 
@@ -569,35 +571,36 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                 {/* Cost Panel */}
                 <TabPanel>
                   <Grid numItems={2} className="gap-2 w-full">
-                    {/* Total Spend Card */}
-                    <Col numColSpan={2}>
-                      <div className="flex items-center gap-4 mt-2 mb-2">
-                        <Text className="text-tremor-default text-tremor-content dark:text-dark-tremor-content text-lg">
-                          Project Spend{" "}
-                          {dateValue.from && dateValue.to && (
-                            <>
-                              {dateValue.from.toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: dateValue.from.getFullYear() !== dateValue.to.getFullYear() ? "numeric" : undefined,
-                              })}
-                              {" - "}
-                              {dateValue.to.toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </>
-                          )}
-                        </Text>
-                      </div>
+                    {canSeeCost && (
+                      <Col numColSpan={2}>
+                        <div className="flex items-center gap-4 mt-2 mb-2">
+                          <Text className="text-tremor-default text-tremor-content dark:text-dark-tremor-content text-lg">
+                            Project Spend{" "}
+                            {dateValue.from && dateValue.to && (
+                              <>
+                                {dateValue.from.toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: dateValue.from.getFullYear() !== dateValue.to.getFullYear() ? "numeric" : undefined,
+                                })}
+                                {" - "}
+                                {dateValue.to.toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </>
+                            )}
+                          </Text>
+                        </div>
 
-                      <ViewUserSpend
-                        userSpend={totalSpend}
-                        selectedTeam={null}
-                        userMaxBudget={currentUser?.max_budget || null}
-                      />
-                    </Col>
+                        <ViewUserSpend
+                          userSpend={totalSpend}
+                          selectedTeam={null}
+                          userMaxBudget={currentUser?.max_budget || null}
+                        />
+                      </Col>
+                    )}
 
                     <Col numColSpan={2}>
                       <Card>
@@ -632,16 +635,29 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                               {userSpendData.metadata?.total_tokens?.toLocaleString() || 0}
                             </Text>
                           </Card>
-                          <Card>
-                            <Title>Average Cost per Request</Title>
-                            <Text className="text-2xl font-bold mt-2">
-                              $
-                              {formatNumberWithCommas(
-                                (totalSpend || 0) / (userSpendData.metadata?.total_api_requests || 1),
-                                4,
-                              )}
-                            </Text>
-                          </Card>
+                          {canSeeCost ? (
+                            <Card>
+                              <Title>Average Cost per Request</Title>
+                              <Text className="text-2xl font-bold mt-2">
+                                $
+                                {formatNumberWithCommas(
+                                  (totalSpend || 0) / (userSpendData.metadata?.total_api_requests || 1),
+                                  4,
+                                )}
+                              </Text>
+                            </Card>
+                          ) : (
+                            <Card>
+                              <Title>Average Tokens per Request</Title>
+                              <Text className="text-2xl font-bold mt-2">
+                                {formatNumberWithCommas(
+                                  (userSpendData.metadata?.total_tokens || 0) /
+                                    (userSpendData.metadata?.total_api_requests || 1),
+                                  0,
+                                )}
+                              </Text>
+                            </Card>
+                          )}
                         </Grid>
                       </Card>
                     </Col>
@@ -649,7 +665,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                     {/* Daily Spend Chart */}
                     <Col numColSpan={2}>
                       <Card>
-                        <Title>Daily Spend</Title>
+                        <Title>Daily {canSeeCost ? "Spend" : "Tokens"}</Title>
                         {loading ? (
                           <ChartLoader isDateChanging={isDateChanging} />
                         ) : (
@@ -658,19 +674,25 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                               (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
                             )}
                             index="date"
-                            categories={["metrics.spend"]}
+                            categories={[canSeeCost ? "metrics.spend" : "metrics.total_tokens"]}
                             colors={["cyan"]}
-                            valueFormatter={valueFormatterSpend}
+                            valueFormatter={(value) =>
+                              canSeeCost ? valueFormatterSpend(value) : formatNumberWithCommas(value, 0)
+                            }
                             yAxisWidth={100}
                             showLegend={false}
                             customTooltip={({ payload, active }) => {
                               if (!active || !payload?.[0]) return null;
                               const data = payload[0].payload;
+                              const metricValue = canSeeCost ? data.metrics.spend : data.metrics.total_tokens;
                               return (
                                 <div className="bg-white p-4 shadow-lg rounded-lg border">
                                   <p className="font-bold">{data.date}</p>
                                   <p className="text-cyan-500">
-                                    Spend: ${formatNumberWithCommas(data.metrics.spend, 2)}
+                                    {canSeeCost ? "Spend" : "Tokens"}:{" "}
+                                    {canSeeCost
+                                      ? `$${formatNumberWithCommas(metricValue, 2)}`
+                                      : formatNumberWithCommas(metricValue, 0)}
                                   </p>
                                   <p className="text-gray-600">Requests: {data.metrics.api_requests}</p>
                                   <p className="text-gray-600">Successful: {data.metrics.successful_requests}</p>
@@ -692,6 +714,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                           teams={null}
                           topKeysLimit={topKeysLimit}
                           setTopKeysLimit={setTopKeysLimit}
+                          metric={canSeeCost ? "spend" : "tokens"}
                         />
                       </Card>
                     </Col>
@@ -747,19 +770,27 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                                   style={{ height: Math.min(modelData.length, topModelsLimit) * 52 }}
                                   data={modelData}
                                   index="key"
-                                  categories={["spend"]}
+                                  categories={[canSeeCost ? "spend" : "tokens"]}
                                   colors={["cyan"]}
-                                  valueFormatter={valueFormatterSpend}
+                                  valueFormatter={(value) =>
+                                    canSeeCost ? valueFormatterSpend(value) : formatNumberWithCommas(value, 0)
+                                  }
                                   layout="vertical"
                                   yAxisWidth={200}
                                   showLegend={false}
                                   customTooltip={({ payload, active }) => {
                                     if (!active || !payload?.[0]) return null;
                                     const data = payload[0].payload;
+                                    const metricValue = canSeeCost ? data.spend : data.tokens;
                                     return (
                                       <div className="bg-white p-4 shadow-lg rounded-lg border">
                                         <p className="font-bold">{data.key}</p>
-                                        <p className="text-cyan-500">Spend: ${formatNumberWithCommas(data.spend, 2)}</p>
+                                        <p className="text-cyan-500">
+                                          {canSeeCost ? "Spend" : "Tokens"}:{" "}
+                                          {canSeeCost
+                                            ? `$${formatNumberWithCommas(metricValue, 2)}`
+                                            : formatNumberWithCommas(metricValue, 0)}
+                                        </p>
                                         <p className="text-gray-600">
                                           Total Requests: {data.requests.toLocaleString()}
                                         </p>
@@ -785,6 +816,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                         loading={loading}
                         isDateChanging={isDateChanging}
                         providerSpend={getProviderSpend()}
+                        metric={canSeeCost ? "spend" : "tokens"}
                       />
                     </Col>
 
@@ -794,13 +826,13 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
 
                 {/* Activity Panel */}
                 <TabPanel>
-                  <ActivityMetrics modelMetrics={modelMetrics} />
+                  <ActivityMetrics modelMetrics={modelMetrics} showCost={canSeeCost} />
                 </TabPanel>
                 <TabPanel>
-                  <ActivityMetrics modelMetrics={keyMetrics} />
+                  <ActivityMetrics modelMetrics={keyMetrics} showCost={canSeeCost} />
                 </TabPanel>
                 <TabPanel>
-                  <ActivityMetrics modelMetrics={mcpServerMetrics} />
+                  <ActivityMetrics modelMetrics={mcpServerMetrics} showCost={canSeeCost} />
                 </TabPanel>
                 <TabPanel>
                   <EndpointUsage userSpendData={userSpendData} />
@@ -825,6 +857,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                 })) || null
               }
               premiumUser={premiumUser}
+              showCost={canSeeCost}
             />
           )}
 
@@ -843,6 +876,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
               }
               premiumUser={premiumUser}
               dateValue={dateValue}
+              showCost={canSeeCost}
             />
           )}
 
@@ -861,6 +895,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
               }
               premiumUser={premiumUser}
               dateValue={dateValue}
+              showCost={canSeeCost}
             />
           )}
           {/* Tag Usage Panel */}
@@ -891,6 +926,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
                 entityList={allTags}
                 premiumUser={premiumUser}
                 dateValue={dateValue}
+                showCost={canSeeCost}
               />
             </>
           )}
@@ -905,6 +941,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
               }
               premiumUser={premiumUser}
               dateValue={dateValue}
+              showCost={canSeeCost}
             />
           )}
           {/* User Usage Panel */}
@@ -917,6 +954,7 @@ const UsagePage: React.FC<UsagePageProps> = ({ teams, organizations }) => {
               entityList={userOptions.length > 0 ? userOptions : null}
               premiumUser={premiumUser}
               dateValue={dateValue}
+              showCost={canSeeCost}
             />
           )}
           {/* User Agent Activity Panel */}

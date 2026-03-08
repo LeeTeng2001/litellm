@@ -16,15 +16,24 @@ interface TopKeyViewProps {
   showTags?: boolean;
   topKeysLimit: number;
   setTopKeysLimit: (limit: number) => void;
+  metric?: "spend" | "tokens";
 }
 
-const TopKeyView: React.FC<TopKeyViewProps> = ({ topKeys, teams, showTags = false, topKeysLimit, setTopKeysLimit }) => {
+const TopKeyView: React.FC<TopKeyViewProps> = ({
+  topKeys,
+  teams,
+  showTags = false,
+  topKeysLimit,
+  setTopKeysLimit,
+  metric = "spend",
+}) => {
   const { accessToken, userRole, userId: userID, premiumUser } = useAuthorized();
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [keyData, setKeyData] = useState<any | undefined>(undefined);
   const [viewMode, setViewMode] = useState<"chart" | "table">("table");
   const [expandedTags, setExpandedTags] = useState<Set<string>>(new Set());
+  const metricLabel = metric === "spend" ? "Spend (USD)" : "Tokens";
 
   const toggleTagsExpansion = (apiKey: string) => {
     setExpandedTags((prev) => {
@@ -121,26 +130,28 @@ const TopKeyView: React.FC<TopKeyViewProps> = ({ topKeys, teams, showTags = fals
       const displayTags = isExpanded ? sortedTags : sortedTags.slice(0, 2);
       const hasMoreTags = tags.length > 2;
 
-      return (
-        <div className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-1">
-            {displayTags.map((tag, index) => (
-              <Tooltip
-                key={index}
-                title={
-                  <div>
+        return (
+          <div className="overflow-hidden">
+            <div className="flex flex-wrap items-center gap-1">
+              {displayTags.map((tag, index) => (
+                <Tooltip
+                  key={index}
+                  title={
                     <div>
-                      <span className="text-gray-300">Tag Name:</span> {tag.tag}
+                      <div>
+                        <span className="text-gray-300">Tag Name:</span> {tag.tag}
+                      </div>
+                      {metric === "spend" && (
+                        <div>
+                          <span className="text-gray-300">Spend:</span>{" "}
+                          {tag.usage > 0 && tag.usage < 0.01 ? "<$0.01" : `$${formatNumberWithCommas(tag.usage, 2)}`}
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <span className="text-gray-300">Spend:</span>{" "}
-                      {tag.usage > 0 && tag.usage < 0.01 ? "<$0.01" : `$${formatNumberWithCommas(tag.usage, 2)}`}
-                    </div>
-                  </div>
-                }
-              >
-                <span className="px-2 py-1 bg-gray-100 rounded-full text-xs">{tag.tag.slice(0, 7)}...</span>
-              </Tooltip>
+                  }
+                >
+                  <span className="px-2 py-1 bg-gray-100 rounded-full text-xs">{tag.tag.slice(0, 7)}...</span>
+                </Tooltip>
             ))}
             {hasMoreTags && (
               <button
@@ -162,11 +173,14 @@ const TopKeyView: React.FC<TopKeyViewProps> = ({ topKeys, teams, showTags = fals
   };
 
   const spendColumn = {
-    header: "Spend (USD)",
-    accessorKey: "spend",
+    header: metricLabel,
+    accessorKey: metric,
     cell: (info: any) => {
       const value = info.getValue();
-      return value > 0 && value < 0.01 ? "<$0.01" : `$${formatNumberWithCommas(value, 2)}`;
+      if (metric === "spend") {
+        return value > 0 && value < 0.01 ? "<$0.01" : `$${formatNumberWithCommas(value, 2)}`;
+      }
+      return value?.toLocaleString() || 0;
     },
   };
 
@@ -213,13 +227,15 @@ const TopKeyView: React.FC<TopKeyViewProps> = ({ topKeys, teams, showTags = fals
             style={{ height: Math.min(processedTopKeys.length, topKeysLimit) * 52 }}
             data={processedTopKeys}
             index="display_key_alias"
-            categories={["spend"]}
+            categories={[metric]}
             colors={["cyan"]}
             yAxisWidth={120}
             tickGap={5}
             layout="vertical"
             showLegend={false}
-            valueFormatter={(value) => `$${formatNumberWithCommas(value, 2)}`}
+            valueFormatter={(value) =>
+              metric === "spend" ? `$${formatNumberWithCommas(value, 2)}` : formatNumberWithCommas(value, 0)
+            }
             onValueChange={(item) => handleKeyClick(item)}
             showTooltip={true}
             customTooltip={(props) => {
@@ -236,8 +252,12 @@ const TopKeyView: React.FC<TopKeyViewProps> = ({ topKeys, teams, showTags = fals
                       <span className="font-mono text-gray-100 break-all">{item?.api_key}</span>
                     </div>
                     <div className="text-sm">
-                      <span className="text-gray-300">Spend: </span>
-                      <span className="text-white font-medium">${formatNumberWithCommas(item?.spend, 2)}</span>
+                      <span className="text-gray-300">{metricLabel}: </span>
+                      <span className="text-white font-medium">
+                        {metric === "spend"
+                          ? `$${formatNumberWithCommas(item?.spend, 2)}`
+                          : formatNumberWithCommas(item?.tokens, 0)}
+                      </span>
                     </div>
                   </div>
                 </div>

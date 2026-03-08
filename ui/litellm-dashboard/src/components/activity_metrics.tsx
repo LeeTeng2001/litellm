@@ -12,21 +12,24 @@ import { valueFormatter } from "./UsagePage/utils/value_formatters";
 interface ActivityMetricsProps {
   modelMetrics: Record<string, ModelActivityData>;
   hidePromptCachingMetrics?: boolean;
+  showCost?: boolean;
 }
 
 const ModelSection = ({
   modelName,
   metrics,
   hidePromptCachingMetrics = false,
+  showCost = true,
 }: {
   modelName: string;
   metrics: ModelActivityData;
   hidePromptCachingMetrics?: boolean;
+  showCost?: boolean;
 }) => {
   return (
     <div className="space-y-2">
       {/* Summary Cards */}
-      <Grid numItems={4} className="gap-4">
+      <Grid numItems={showCost ? 4 : 3} className="gap-4">
         <Card>
           <Text>Total Requests</Text>
           <Title>{metrics.total_requests.toLocaleString()}</Title>
@@ -40,28 +43,35 @@ const ModelSection = ({
           <Title>{metrics.total_tokens.toLocaleString()}</Title>
           <Text>{Math.round(metrics.total_tokens / metrics.total_successful_requests)} avg per successful request</Text>
         </Card>
-        <Card>
-          <Text>Total Spend</Text>
-          <Title>${formatNumberWithCommas(metrics.total_spend, 2)}</Title>
-          <Text>
-            ${formatNumberWithCommas(metrics.total_spend / metrics.total_successful_requests, 3)} per successful request
-          </Text>
-        </Card>
+        {showCost && (
+          <Card>
+            <Text>Total Spend</Text>
+            <Title>${formatNumberWithCommas(metrics.total_spend, 2)}</Title>
+            <Text>
+              ${formatNumberWithCommas(metrics.total_spend / metrics.total_successful_requests, 3)} per successful request
+            </Text>
+          </Card>
+        )}
       </Grid>
 
       {metrics.top_api_keys && metrics.top_api_keys.length > 0 && (
         <Card className="mt-4">
-          <Title>Top Virtual Keys by Spend</Title>
+          <Title>Top Virtual Keys by {showCost ? "Spend" : "Tokens"}</Title>
           <div className="mt-3">
             <div className="grid grid-cols-1 gap-2">
-              {metrics.top_api_keys.map((keyData, index) => (
+              {(showCost
+                ? metrics.top_api_keys
+                : [...metrics.top_api_keys].sort((a, b) => b.tokens - a.tokens)
+              ).map((keyData) => (
                 <div key={keyData.api_key} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                   <div>
                     <Text className="font-medium">{keyData.key_alias || `${keyData.api_key.substring(0, 10)}...`}</Text>
                     {keyData.team_id && <Text className="text-xs text-gray-500">Team: {keyData.team_id}</Text>}
                   </div>
                   <div className="text-right">
-                    <Text className="font-medium">${formatNumberWithCommas(keyData.spend, 2)}</Text>
+                    <Text className="font-medium">
+                      {showCost ? `$${formatNumberWithCommas(keyData.spend, 2)}` : keyData.tokens.toLocaleString()}
+                    </Text>
                     <Text className="text-xs text-gray-500">
                       {keyData.requests.toLocaleString()} requests | {keyData.tokens.toLocaleString()} tokens
                     </Text>
@@ -74,22 +84,24 @@ const ModelSection = ({
       )}
 
       {metrics.top_models && metrics.top_models.length > 0 && (
-        <KeyModelUsageView topModels={metrics.top_models} />
+        <KeyModelUsageView topModels={metrics.top_models} showCost={showCost} />
       )}
 
       {/* Spend per day - Full width card */}
       <Card className="mt-4">
         <div className="flex justify-between items-center">
-          <Title>Spend per day</Title>
-          <CustomLegend categories={["metrics.spend"]} colors={["green"]} />
+          <Title>{showCost ? "Spend per day" : "Tokens per day"}</Title>
+          <CustomLegend categories={[showCost ? "metrics.spend" : "metrics.total_tokens"]} colors={["green"]} />
         </div>
         <BarChart
           className="mt-4"
           data={metrics.daily_data}
           index="date"
-          categories={["metrics.spend"]}
+          categories={[showCost ? "metrics.spend" : "metrics.total_tokens"]}
           colors={["green"]}
-          valueFormatter={(value: number) => `$${formatNumberWithCommas(value, 2, true)}`}
+          valueFormatter={(value: number) =>
+            showCost ? `$${formatNumberWithCommas(value, 2, true)}` : formatNumberWithCommas(value, 0)
+          }
           yAxisWidth={72}
         />
       </Card>
@@ -183,11 +195,17 @@ const ModelSection = ({
   );
 };
 
-export const ActivityMetrics: React.FC<ActivityMetricsProps> = ({ modelMetrics, hidePromptCachingMetrics = false }) => {
+export const ActivityMetrics: React.FC<ActivityMetricsProps> = ({
+  modelMetrics,
+  hidePromptCachingMetrics = false,
+  showCost = true,
+}) => {
   const modelNames = Object.keys(modelMetrics).sort((a, b) => {
     if (a === "") return 1;
     if (b === "") return -1;
-    return modelMetrics[b].total_spend - modelMetrics[a].total_spend;
+    return showCost
+      ? modelMetrics[b].total_spend - modelMetrics[a].total_spend
+      : modelMetrics[b].total_tokens - modelMetrics[a].total_tokens;
   });
 
   // Calculate total metrics across all models
@@ -260,7 +278,7 @@ export const ActivityMetrics: React.FC<ActivityMetricsProps> = ({ modelMetrics, 
       {/* Global Summary */}
       <div className="border rounded-lg p-4">
         <Title>Overall Usage</Title>
-        <Grid numItems={4} className="gap-4 mb-4">
+        <Grid numItems={showCost ? 4 : 3} className="gap-4 mb-4">
           <Card>
             <Text>Total Requests</Text>
             <Title>{totalMetrics.total_requests.toLocaleString()}</Title>
@@ -273,10 +291,12 @@ export const ActivityMetrics: React.FC<ActivityMetricsProps> = ({ modelMetrics, 
             <Text>Total Tokens</Text>
             <Title>{totalMetrics.total_tokens.toLocaleString()}</Title>
           </Card>
-          <Card>
-            <Text>Total Spend</Text>
-            <Title>${formatNumberWithCommas(totalMetrics.total_spend, 2)}</Title>
-          </Card>
+          {showCost && (
+            <Card>
+              <Text>Total Spend</Text>
+              <Title>${formatNumberWithCommas(totalMetrics.total_spend, 2)}</Title>
+            </Card>
+          )}
         </Grid>
 
         <Grid numItems={2} className="gap-4">
@@ -330,8 +350,9 @@ export const ActivityMetrics: React.FC<ActivityMetricsProps> = ({ modelMetrics, 
               <div className="flex justify-between items-center w-full">
                 <Title>{modelMetrics[modelName].label || "Unknown Item"}</Title>
                 <div className="flex space-x-4 text-sm text-gray-500">
-                  <span>${formatNumberWithCommas(modelMetrics[modelName].total_spend, 2)}</span>
+                  {showCost && <span>${formatNumberWithCommas(modelMetrics[modelName].total_spend, 2)}</span>}
                   <span>{modelMetrics[modelName].total_requests.toLocaleString()} requests</span>
+                  {!showCost && <span>{modelMetrics[modelName].total_tokens.toLocaleString()} tokens</span>}
                 </div>
               </div>
             }
@@ -340,6 +361,7 @@ export const ActivityMetrics: React.FC<ActivityMetricsProps> = ({ modelMetrics, 
               modelName={modelName || "Unknown Model"}
               metrics={modelMetrics[modelName]}
               hidePromptCachingMetrics={hidePromptCachingMetrics}
+              showCost={showCost}
             />
           </Collapse.Panel>
         ))}

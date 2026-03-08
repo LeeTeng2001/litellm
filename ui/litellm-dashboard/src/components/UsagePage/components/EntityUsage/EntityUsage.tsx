@@ -85,9 +85,17 @@ interface EntityUsageProps {
   entityList: EntityList[] | null;
   premiumUser: boolean;
   dateValue: DateRangePickerValue;
+  showCost?: boolean;
 }
 
-const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, entityId, entityList, dateValue }) => {
+const EntityUsage: React.FC<EntityUsageProps> = ({
+  accessToken,
+  entityType,
+  entityId,
+  entityList,
+  dateValue,
+  showCost = true,
+}) => {
   const [spendData, setSpendData] = useState<EntitySpendData>({
     results: [],
     metadata: {
@@ -105,6 +113,10 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [topKeysLimit, setTopKeysLimit] = useState<number>(5);
   const [topModelsLimit, setTopModelsLimit] = useState<number>(5);
+  const metricLabel = showCost ? "Spend" : "Tokens";
+  const metricKey = showCost ? "metrics.spend" : "metrics.total_tokens";
+  const metricValueFormatter = (value: number) =>
+    showCost ? valueFormatterSpend(value) : formatNumberWithCommas(value, 0);
 
   const fetchSpendData = async () => {
     if (!accessToken || !dateValue.from || !dateValue.to) return;
@@ -205,7 +217,7 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
         key: model,
         ...metrics,
       }))
-      .sort((a, b) => b.spend - a.spend)
+      .sort((a, b) => (showCost ? b.spend - a.spend : b.tokens - a.tokens))
       .slice(0, topModelsLimit);
   };
 
@@ -269,8 +281,9 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
         key_alias: metrics.metadata.key_alias || "-", // Using truncated key as alias
         tags: metrics.metadata.tags || "-",
         spend: metrics.metrics.spend,
+        tokens: metrics.metrics.total_tokens,
       }))
-      .sort((a, b) => b.spend - a.spend)
+      .sort((a, b) => (showCost ? b.spend - a.spend : b.tokens - a.tokens))
       .slice(0, topKeysLimit);
   };
 
@@ -301,8 +314,8 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
     });
 
     return Object.values(providerSpend)
-      .filter((provider) => provider.spend > 0)
-      .sort((a, b) => b.spend - a.spend);
+      .filter((provider) => (showCost ? provider.spend > 0 : provider.tokens > 0))
+      .sort((a, b) => (showCost ? b.spend - a.spend : b.tokens - a.tokens));
   };
 
   const getAllTags = () => {
@@ -361,7 +374,9 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
       });
     });
 
-    const result = Object.values(entitySpend).sort((a, b) => b.metrics.spend - a.metrics.spend);
+    const result = Object.values(entitySpend).sort((a, b) =>
+      showCost ? b.metrics.spend - a.metrics.spend : b.metrics.total_tokens - a.metrics.total_tokens,
+    );
 
     return filterDataByTags(result);
   };
@@ -406,7 +421,7 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
       />
       <TabGroup>
         <TabList variant="solid" className="mt-1">
-          <Tab>Cost</Tab>
+          <Tab>{showCost ? "Cost" : "Usage"}</Tab>
           <Tab>{entityType === "agent" ? "Request / Token Consumption" : "Model Activity"}</Tab>
           <Tab>Key Activity</Tab>
           <Tab>Endpoint Activity</Tab>
@@ -417,14 +432,16 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
               {/* Total Spend Card */}
               <Col numColSpan={2}>
                 <Card>
-                  <Title>{capitalizedEntityLabel} Spend Overview</Title>
-                  <Grid numItems={5} className="gap-4 mt-4">
-                    <Card>
-                      <Title>Total Spend</Title>
-                      <Text className="text-2xl font-bold mt-2">
-                        ${formatNumberWithCommas(spendData.metadata.total_spend, 2)}
-                      </Text>
-                    </Card>
+                  <Title>{capitalizedEntityLabel} {metricLabel} Overview</Title>
+                  <Grid numItems={showCost ? 5 : 4} className="gap-4 mt-4">
+                    {showCost && (
+                      <Card>
+                        <Title>Total Spend</Title>
+                        <Text className="text-2xl font-bold mt-2">
+                          ${formatNumberWithCommas(spendData.metadata.total_spend, 2)}
+                        </Text>
+                      </Card>
+                    )}
                     <Card>
                       <Title>Total Requests</Title>
                       <Text className="text-2xl font-bold mt-2">
@@ -456,25 +473,29 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
               {/* Daily Spend Chart */}
               <Col numColSpan={2}>
                 <Card>
-                  <Title>Daily Spend</Title>
+                  <Title>Daily {metricLabel}</Title>
                   <BarChart
                     data={[...spendData.results].sort(
                       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
                     )}
                     index="date"
-                    categories={["metrics.spend"]}
+                    categories={[metricKey]}
                     colors={["cyan"]}
-                    valueFormatter={valueFormatterSpend}
+                    valueFormatter={metricValueFormatter}
                     yAxisWidth={100}
                     showLegend={false}
                     customTooltip={({ payload, active }) => {
                       if (!active || !payload?.[0]) return null;
                       const data = payload[0].payload;
                       const entityCount = Object.keys(data.breakdown.entities || {}).length;
+                      const metricValue = showCost ? data.metrics.spend : data.metrics.total_tokens;
                       return (
                         <div className="bg-white p-4 shadow-lg rounded-lg border">
                           <p className="font-bold">{data.date}</p>
-                          <p className="text-cyan-500">Total Spend: ${formatNumberWithCommas(data.metrics.spend, 2)}</p>
+                          <p className="text-cyan-500">
+                            Total {metricLabel}:{" "}
+                            {showCost ? `$${formatNumberWithCommas(metricValue, 2)}` : formatNumberWithCommas(metricValue, 0)}
+                          </p>
                           <p className="text-gray-600">Total Requests: {data.metrics.api_requests}</p>
                           <p className="text-gray-600">Successful: {data.metrics.successful_requests}</p>
                           <p className="text-gray-600">Failed: {data.metrics.failed_requests}</p>
@@ -483,20 +504,27 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                             Total {capitalizedEntityLabel}s: {entityCount}
                           </p>
                           <div className="mt-2 border-t pt-2">
-                            <p className="font-semibold">Spend by {capitalizedEntityLabel}:</p>
+                            <p className="font-semibold">{metricLabel} by {capitalizedEntityLabel}:</p>
                             {Object.entries(data.breakdown.entities || {})
                               .sort(([, a], [, b]) => {
-                                const spendA = (a as EntityMetrics).metrics.spend;
-                                const spendB = (b as EntityMetrics).metrics.spend;
-                                return spendB - spendA;
+                                const metricA = showCost
+                                  ? (a as EntityMetrics).metrics.spend
+                                  : (a as EntityMetrics).metrics.total_tokens;
+                                const metricB = showCost
+                                  ? (b as EntityMetrics).metrics.spend
+                                  : (b as EntityMetrics).metrics.total_tokens;
+                                return metricB - metricA;
                               })
                               .slice(0, 5)
                               .map(([entity, entityData]) => {
                                 const metrics = entityData as EntityMetrics;
+                                const metricAmount = showCost ? metrics.metrics.spend : metrics.metrics.total_tokens;
                                 return (
                                   <p key={entity} className="text-sm text-gray-600">
-                                    {getEntityLabel(entity, metrics.metadata)}: $
-                                    {formatNumberWithCommas(metrics.metrics.spend, 2)}
+                                    {getEntityLabel(entity, metrics.metadata)}:{" "}
+                                    {showCost
+                                      ? `$${formatNumberWithCommas(metricAmount, 2)}`
+                                      : formatNumberWithCommas(metricAmount, 0)}
                                   </p>
                                 );
                               })}
@@ -516,17 +544,19 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                 <Card>
                   <div className="flex flex-col space-y-4">
                     <div className="flex flex-col space-y-2">
-                      <Title>Spend Per {capitalizedEntityLabel}</Title>
-                      <Subtitle className="text-xs">Showing Top 5 by Spend</Subtitle>
-                      <div className="flex items-center text-sm text-gray-500">
-                        <span>Get Started by Tracking cost per {capitalizedEntityLabel} </span>
-                        <a
-                          href="https://docs.litellm.ai/docs/proxy/enterprise#spend-tracking"
-                          className="text-blue-500 hover:text-blue-700 ml-1"
-                        >
-                          here
-                        </a>
-                      </div>
+                      <Title>{metricLabel} Per {capitalizedEntityLabel}</Title>
+                      <Subtitle className="text-xs">Showing Top 5 by {metricLabel}</Subtitle>
+                      {showCost && (
+                        <div className="flex items-center text-sm text-gray-500">
+                          <span>Get Started by Tracking cost per {capitalizedEntityLabel} </span>
+                          <a
+                            href="https://docs.litellm.ai/docs/proxy/enterprise#spend-tracking"
+                            className="text-blue-500 hover:text-blue-700 ml-1"
+                          >
+                            here
+                          </a>
+                        </div>
+                      )}
                     </div>
                     <Grid numItems={2} className="gap-6">
                       <Col numColSpan={1}>
@@ -534,19 +564,25 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                           className="mt-4 h-52"
                           data={getProcessedEntityBreakdownForChart()}
                           index="metadata.alias_display"
-                          categories={["metrics.spend"]}
+                          categories={[metricKey]}
                           colors={["cyan"]}
-                          valueFormatter={valueFormatterSpend}
+                          valueFormatter={metricValueFormatter}
                           layout="vertical"
                           showLegend={false}
                           yAxisWidth={150}
                           customTooltip={({ payload, active }) => {
                             if (!active || !payload?.[0]) return null;
                             const data = payload[0].payload;
+                            const metricValue = showCost ? data.metrics.spend : data.metrics.total_tokens;
                             return (
                               <div className="bg-white p-4 shadow-lg rounded-lg border">
                                 <p className="font-bold">{data.metadata.alias}</p>
-                                <p className="text-cyan-500">Spend: ${formatNumberWithCommas(data.metrics.spend, 4)}</p>
+                                <p className="text-cyan-500">
+                                  {metricLabel}:{" "}
+                                  {showCost
+                                    ? `$${formatNumberWithCommas(metricValue, 4)}`
+                                    : formatNumberWithCommas(metricValue, 0)}
+                                </p>
                                 <p className="text-gray-600">Requests: {data.metrics.api_requests.toLocaleString()}</p>
                                 <p className="text-green-600">
                                   Successful: {data.metrics.successful_requests.toLocaleString()}
@@ -562,21 +598,27 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                         <div className="h-52 overflow-y-auto">
                           <Table>
                             <TableHead>
-                              <TableRow>
-                                <TableHeaderCell>{capitalizedEntityLabel}</TableHeaderCell>
-                                <TableHeaderCell>Spend</TableHeaderCell>
-                                <TableHeaderCell className="text-green-600">Successful</TableHeaderCell>
-                                <TableHeaderCell className="text-red-600">Failed</TableHeaderCell>
-                                <TableHeaderCell>Tokens</TableHeaderCell>
-                              </TableRow>
+                            <TableRow>
+                              <TableHeaderCell>{capitalizedEntityLabel}</TableHeaderCell>
+                              <TableHeaderCell>{metricLabel}</TableHeaderCell>
+                              <TableHeaderCell className="text-green-600">Successful</TableHeaderCell>
+                              <TableHeaderCell className="text-red-600">Failed</TableHeaderCell>
+                              <TableHeaderCell>Tokens</TableHeaderCell>
+                            </TableRow>
                             </TableHead>
                             <TableBody>
                               {getEntityBreakdown()
-                                .filter((entity) => entity.metrics.spend > 0)
+                                .filter((entity) =>
+                                  showCost ? entity.metrics.spend > 0 : entity.metrics.total_tokens > 0,
+                                )
                                 .map((entity) => (
                                   <TableRow key={entity.metadata.id}>
                                     <TableCell>{entity.metadata.alias}</TableCell>
-                                    <TableCell>${formatNumberWithCommas(entity.metrics.spend, 4)}</TableCell>
+                                    <TableCell>
+                                      {showCost
+                                        ? `$${formatNumberWithCommas(entity.metrics.spend, 4)}`
+                                        : formatNumberWithCommas(entity.metrics.total_tokens, 0)}
+                                    </TableCell>
                                     <TableCell className="text-green-600">
                                       {entity.metrics.successful_requests.toLocaleString()}
                                     </TableCell>
@@ -605,6 +647,7 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                     showTags={entityType === "tag"}
                     topKeysLimit={topKeysLimit}
                     setTopKeysLimit={setTopKeysLimit}
+                    metric={showCost ? "spend" : "tokens"}
                   />
                 </Card>
               </Col>
@@ -617,6 +660,7 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                     topModels={getTopModels()}
                     topModelsLimit={topModelsLimit}
                     setTopModelsLimit={setTopModelsLimit}
+                    metric={showCost ? "spend" : "tokens"}
                   />
                 </Card>
               </Col>
@@ -632,8 +676,10 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                           className="mt-4 h-40"
                           data={getProviderSpend()}
                           index="provider"
-                          category="spend"
-                          valueFormatter={(value) => `$${formatNumberWithCommas(value, 2)}`}
+                          category={showCost ? "spend" : "tokens"}
+                          valueFormatter={(value) =>
+                            showCost ? `$${formatNumberWithCommas(value, 2)}` : formatNumberWithCommas(value, 0)
+                          }
                           colors={["cyan", "blue", "indigo", "violet", "purple"]}
                         />
                       </Col>
@@ -642,7 +688,7 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                           <TableHead>
                             <TableRow>
                               <TableHeaderCell>Provider</TableHeaderCell>
-                              <TableHeaderCell>Spend</TableHeaderCell>
+                              <TableHeaderCell>{metricLabel}</TableHeaderCell>
                               <TableHeaderCell className="text-green-600">Successful</TableHeaderCell>
                               <TableHeaderCell className="text-red-600">Failed</TableHeaderCell>
                               <TableHeaderCell>Tokens</TableHeaderCell>
@@ -674,7 +720,11 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
                                     <span>{provider.provider}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell>${formatNumberWithCommas(provider.spend, 2)}</TableCell>
+                                <TableCell>
+                                  {showCost
+                                    ? `$${formatNumberWithCommas(provider.spend, 2)}`
+                                    : formatNumberWithCommas(provider.tokens, 0)}
+                                </TableCell>
                                 <TableCell className="text-green-600">
                                   {provider.successful_requests.toLocaleString()}
                                 </TableCell>
@@ -694,10 +744,18 @@ const EntityUsage: React.FC<EntityUsageProps> = ({ accessToken, entityType, enti
             </Grid>
           </TabPanel>
           <TabPanel>
-            <ActivityMetrics modelMetrics={modelMetrics} hidePromptCachingMetrics={entityType === "agent"} />
+            <ActivityMetrics
+              modelMetrics={modelMetrics}
+              hidePromptCachingMetrics={entityType === "agent"}
+              showCost={showCost}
+            />
           </TabPanel>
           <TabPanel>
-            <ActivityMetrics modelMetrics={keyMetrics} hidePromptCachingMetrics={entityType === "agent"} />
+            <ActivityMetrics
+              modelMetrics={keyMetrics}
+              hidePromptCachingMetrics={entityType === "agent"}
+              showCost={showCost}
+            />
           </TabPanel>
           <TabPanel>
             <EndpointUsage userSpendData={spendData} />

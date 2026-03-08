@@ -16,10 +16,17 @@ interface TopModelViewProps {
   topModels: TopModel[];
   topModelsLimit: number;
   setTopModelsLimit: (limit: number) => void;
+  metric?: "spend" | "tokens";
 }
 
-export default function TopModelView({ topModels, topModelsLimit, setTopModelsLimit }: TopModelViewProps) {
+export default function TopModelView({
+  topModels,
+  topModelsLimit,
+  setTopModelsLimit,
+  metric = "spend",
+}: TopModelViewProps) {
   const [modelViewMode, setModelViewMode] = useState<"chart" | "table">("table");
+  const metricLabel = metric === "spend" ? "Spend (USD)" : "Tokens";
 
   const columns = [
     {
@@ -28,11 +35,11 @@ export default function TopModelView({ topModels, topModelsLimit, setTopModelsLi
       cell: (info: any) => info.getValue() || "-",
     },
     {
-      header: "Spend (USD)",
-      accessorKey: "spend",
+      header: metricLabel,
+      accessorKey: metric,
       cell: (info: any) => {
         const value = info.getValue();
-        return `$${formatNumberWithCommas(value, 2)}`;
+        return metric === "spend" ? `$${formatNumberWithCommas(value, 2)}` : value?.toLocaleString() || 0;
       },
     },
     {
@@ -88,9 +95,11 @@ export default function TopModelView({ topModels, topModelsLimit, setTopModelsLi
             style={{ height: Math.min(processedTopModels.length, topModelsLimit) * 52 }}
             data={processedTopModels}
             index="key"
-            categories={["spend"]}
+            categories={[metric]}
             colors={["cyan"]}
-            valueFormatter={(value) => `$${formatNumberWithCommas(value, 2)}`}
+            valueFormatter={(value) =>
+              metric === "spend" ? `$${formatNumberWithCommas(value, 2)}` : formatNumberWithCommas(value, 0)
+            }
             layout="vertical"
             yAxisWidth={200}
             tickGap={5}

@@ -32,14 +32,22 @@ interface SpendByProviderProps {
   loading: boolean;
   isDateChanging: boolean;
   providerSpend: ProviderSpendData[];
+  metric?: "spend" | "tokens";
 }
 
-const SpendByProvider: React.FC<SpendByProviderProps> = ({ loading, isDateChanging, providerSpend }) => {
+const SpendByProvider: React.FC<SpendByProviderProps> = ({
+  loading,
+  isDateChanging,
+  providerSpend,
+  metric = "spend",
+}) => {
   const [includeZeroSpend, setIncludeZeroSpend] = useState(false);
   const [includeUnknown, setIncludeUnknown] = useState(false);
+  const metricLabel = metric === "spend" ? "Spend" : "Tokens";
 
   const filteredProviderSpend = providerSpend.filter((provider) => {
     const isUnknown = provider.provider?.toLowerCase() === "unknown";
+    const metricValue = metric === "spend" ? provider.spend : provider.tokens;
 
     // If includeUnknown is true, always include unknown provider
     if (isUnknown) {
@@ -52,16 +60,16 @@ const SpendByProvider: React.FC<SpendByProviderProps> = ({ loading, isDateChangi
       return true;
     }
 
-    return provider.spend > 0;
+    return metricValue > 0;
   });
 
   return (
     <Card className="h-full">
       <div className="flex justify-between items-center mb-4">
-        <Title>Spend by Provider</Title>
+        <Title>{metricLabel} by Provider</Title>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-700">Show Zero Spend</label>
+            <label className="text-sm text-gray-700">Show Zero {metricLabel}</label>
             <Switch checked={includeZeroSpend} onChange={setIncludeZeroSpend} />
           </div>
           <div className="flex items-center gap-2">
@@ -84,8 +92,10 @@ const SpendByProvider: React.FC<SpendByProviderProps> = ({ loading, isDateChangi
               className="mt-4 h-40"
               data={filteredProviderSpend}
               index="provider"
-              category="spend"
-              valueFormatter={(value) => `$${formatNumberWithCommas(value, 2)}`}
+              category={metric}
+              valueFormatter={(value) =>
+                metric === "spend" ? `$${formatNumberWithCommas(value, 2)}` : formatNumberWithCommas(value, 0)
+              }
               colors={["cyan"]}
             />
           </Col>
@@ -94,7 +104,7 @@ const SpendByProvider: React.FC<SpendByProviderProps> = ({ loading, isDateChangi
               <TableHead>
                 <TableRow>
                   <TableHeaderCell>Provider</TableHeaderCell>
-                  <TableHeaderCell>Spend</TableHeaderCell>
+                  <TableHeaderCell>{metricLabel}</TableHeaderCell>
                   <TableHeaderCell className="text-green-600">Successful</TableHeaderCell>
                   <TableHeaderCell className="text-red-600">Failed</TableHeaderCell>
                   <TableHeaderCell>Tokens</TableHeaderCell>
@@ -109,7 +119,11 @@ const SpendByProvider: React.FC<SpendByProviderProps> = ({ loading, isDateChangi
                         <span>{provider.provider}</span>
                       </div>
                     </TableCell>
-                    <TableCell>${formatNumberWithCommas(provider.spend, 2)}</TableCell>
+                    <TableCell>
+                      {metric === "spend"
+                        ? `$${formatNumberWithCommas(provider.spend, 2)}`
+                        : formatNumberWithCommas(provider.tokens, 0)}
+                    </TableCell>
                     <TableCell className="text-green-600">
                       {provider.successful_requests.toLocaleString()}
                     </TableCell>
